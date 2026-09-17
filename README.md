@@ -1,9 +1,16 @@
-# Event App
+# React + Vite
 
-A web app for hosting and managing weekly events — RSVPs, guest lists, and (eventually) letting other people run their own events with it too.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-Built by Jacob while learning to code, with Claude as a teaching partner along the way.
+Currently, two official plugins are available:
 
-## Status
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Just getting started. Currently: project setup.
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
