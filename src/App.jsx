@@ -1,4 +1,9 @@
+import { useState } from 'react';
+
 function App() {
+  const [isGoing, setIsGoing] = useState(false);
+  const [name, setName] = useState('');
+const [email, setEmail] = useState('');
   const event = {
     title: "New Year's Eve Party",
     date: "Thursday, December 31, 2026",
@@ -6,7 +11,11 @@ function App() {
     location: "Salt Lake City, UT (venue TBD)",
     description: "A New Year's event to kickoff a year of making connections and deepening relationships.",
   };
-
+function handleSubmit(e) {
+  e.preventDefault();
+  console.log(name, email);
+  setIsGoing(true);
+}
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
@@ -16,6 +25,36 @@ function App() {
         </p>
         <p className="text-gray-500 mb-4">{event.location}</p>
         <p className="text-gray-700">{event.description}</p>
+        {isGoing ? (
+  <p className="mt-6 text-center text-green-600 font-semibold">
+    You're going! 🎉
+  </p>
+) : (
+  <form onSubmit={handleSubmit} className="mt-6 space-y-3">
+    <input
+      type="text"
+      placeholder="Your name"
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      required
+      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    />
+    <input
+      type="email"
+      placeholder="Your email"
+      value={email}
+      onChange={(e) => setEmail(e.target.value)}
+      required
+      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    />
+    <button
+      type="submit"
+      className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition"
+    >
+      RSVP
+    </button>
+  </form>
+)}
       </div>
     </div>
   );
