@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from './supabaseClient';
 
 function App() {
   const [isGoing, setIsGoing] = useState(false);
@@ -11,9 +12,17 @@ const [email, setEmail] = useState('');
     location: "Salt Lake City, UT (venue TBD)",
     description: "A New Year's event to kickoff a year of making connections and deepening relationships.",
   };
-function handleSubmit(e) {
+async function handleSubmit(e) {
   e.preventDefault();
-  console.log(name, email);
+
+  const { error } = await supabase.from('rsvps').insert({ name, email });
+
+  if (error) {
+    console.error('Error saving RSVP:', error);
+    alert('Something went wrong. Please try again.');
+    return;
+  }
+
   setIsGoing(true);
 }
   return (
