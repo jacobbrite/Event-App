@@ -1,10 +1,23 @@
-import { useState } from 'react';
+import Auth from './Auth';
+import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 
 function App() {
   const [isGoing, setIsGoing] = useState(false);
-  const [name, setName] = useState('');
-const [email, setEmail] = useState('');
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const event = {
     title: "New Year's Eve Party",
     date: "Thursday, December 31, 2026",
@@ -12,19 +25,30 @@ const [email, setEmail] = useState('');
     location: "Salt Lake City, UT (venue TBD)",
     description: "A New Year's event to kickoff a year of making connections and deepening relationships.",
   };
-async function handleSubmit(e) {
-  e.preventDefault();
 
-  const { error } = await supabase.from('rsvps').insert({ name, email });
+  async function handleRSVP() {
+    const name = session.user.user_metadata.name;
+    const email = session.user.email;
 
-  if (error) {
-    console.error('Error saving RSVP:', error);
-    alert('Something went wrong. Please try again.');
-    return;
+    const { error } = await supabase.from('rsvps').insert({ name, email });
+
+    if (error) {
+      console.error('Error saving RSVP:', error);
+      alert('Something went wrong. Please try again.');
+      return;
+    }
+
+    setIsGoing(true);
   }
 
-  setIsGoing(true);
-}
+  async function handleLogout() {
+    await supabase.auth.signOut();
+  }
+
+  if (!session) {
+    return <Auth />;
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
@@ -34,36 +58,26 @@ async function handleSubmit(e) {
         </p>
         <p className="text-gray-500 mb-4">{event.location}</p>
         <p className="text-gray-700">{event.description}</p>
+
         {isGoing ? (
-  <p className="mt-6 text-center text-green-600 font-semibold">
-    You're going! 🎉
-  </p>
-) : (
-  <form onSubmit={handleSubmit} className="mt-6 space-y-3">
-    <input
-      type="text"
-      placeholder="Your name"
-      value={name}
-      onChange={(e) => setName(e.target.value)}
-      required
-      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-    />
-    <input
-      type="email"
-      placeholder="Your email"
-      value={email}
-      onChange={(e) => setEmail(e.target.value)}
-      required
-      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-    />
-    <button
-      type="submit"
-      className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition"
-    >
-      RSVP
-    </button>
-  </form>
-)}
+          <p className="mt-6 text-center text-green-600 font-semibold">
+            You're going! 🎉
+          </p>
+        ) : (
+          <button
+            onClick={handleRSVP}
+            className="mt-6 w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition"
+          >
+            RSVP
+          </button>
+        )}
+
+        <button
+          onClick={handleLogout}
+          className="mt-3 w-full bg-gray-200 text-gray-800 font-semibold py-2 rounded-lg hover:bg-gray-300 transition"
+        >
+          Log Out
+        </button>
       </div>
     </div>
   );
