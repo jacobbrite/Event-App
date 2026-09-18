@@ -3,7 +3,8 @@ import { supabase } from './supabaseClient';
 
 function Auth() {
   const [isSignUp, setIsSignUp] = useState(true);
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -16,7 +17,7 @@ function Auth() {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { name } },
+        options: { data: { first_name: firstName, last_name: lastName } },
       });
       if (error) {
         setMessage(error.message);
@@ -39,14 +40,24 @@ function Auth() {
         </h1>
         <form onSubmit={handleSubmit} className="space-y-3">
           {isSignUp && (
-            <input
-              type="text"
-              placeholder="Your name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <>
+              <input
+                type="text"
+                placeholder="First name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="text"
+                placeholder="Last name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </>
           )}
           <input
             type="email"
