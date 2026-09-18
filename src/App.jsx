@@ -3,10 +3,10 @@ import CreateEvent from './CreateEvent';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 
-const HOST_ID = '2862f4b4-479f-466c-bfd1-e150f4bb33fa';
-
 function App() {
   const [session, setSession] = useState(null);
+  const [fetchedProfile, setProfile] = useState(null);
+  const [profileError, setProfileError] = useState(null);
   const [event, setEvent] = useState(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
   const [isGoing, setIsGoing] = useState(false);
@@ -22,6 +22,24 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!session) return;
+
+    async function fetchProfile() {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, is_host')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (error) console.error('Error loading profile:', error);
+      setProfileError(error ? error.message : data ? null : 'No profile row found for this user.');
+      setProfile(data);
+    }
+
+    fetchProfile();
+  }, [session]);
 
   async function fetchEvent() {
     setLoadingEvent(true);
@@ -58,7 +76,7 @@ function App() {
   }, [session, event]);
 
   async function handleRSVP() {
-    const name = `${session.user.user_metadata.first_name} ${session.user.user_metadata.last_name}`;
+    const name = `${profile.first_name} ${profile.last_name}`;
     const email = session.user.email;
 
     const { error } = await supabase.from('rsvps').insert({
@@ -100,12 +118,19 @@ function App() {
     return <Auth />;
   }
 
-  if (loadingEvent) {
+  // Ignore a profile left over from a previous login until the new one loads.
+  const profile = fetchedProfile?.id === session.user.id ? fetchedProfile : null;
+
+  if (profileError) {
+    return <p className="text-center mt-20">Couldn't load your profile: {profileError}</p>;
+  }
+
+  if (loadingEvent || !profile) {
     return <p className="text-center mt-20">Loading...</p>;
   }
 
   if (!event) {
-    if (session.user.id === HOST_ID) {
+    if (profile.is_host) {
       return <CreateEvent onEventCreated={fetchEvent} />;
     }
     return <p className="text-center mt-20">No upcoming events yet — check back soon!</p>;
