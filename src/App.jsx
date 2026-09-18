@@ -18,6 +18,24 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+useEffect(() => {
+  if (!session) return;
+
+  async function checkRSVP() {
+    const { data } = await supabase
+      .from('rsvps')
+      .select('id')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+
+    if (data) {
+      setIsGoing(true);
+    }
+  }
+
+  checkRSVP();
+}, [session]);
+
   const event = {
     title: "New Year's Eve Party",
     date: "Thursday, December 31, 2026",
