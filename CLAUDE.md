@@ -53,22 +53,24 @@ become a product other people can use to host their own events.
 - rsvps.name is still a copy of the name at RSVP time, not joined from profiles
 - Un-RSVP hard-deletes the row rather than soft-deleting with a status column
   — history of cancellations isn't preserved yet
-- Supabase's built-in email sender is used for auth emails — has a low rate
-  limit (a few/hour), fine for dev, needs custom SMTP (e.g. Resend) before
-  real launch
 - Only one event can exist meaningfully at a time in the UI's current fetch
   logic (`.limit(1)`, soonest upcoming) — no event list/browse view yet
 
 ## Roadmap (not yet built, in rough priority order)
 1. Soft-delete status on rsvps (`status: going/cancelled`) instead of hard delete
-2. Custom SMTP for auth emails before going live
-3. Recurring/multi-event support (currently one-off events only)
-4. Error/empty state polish (e.g. profile load failure currently shows a raw message)
+2. Recurring/multi-event support (currently one-off events only)
+3. Error/empty state polish (e.g. profile load failure currently shows a raw message)
 
 Done: `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); password
 reset flow (Auth.jsx "Forgot password?" -> emailed link -> `PASSWORD_RECOVERY`
 event in App.jsx -> ResetPassword.jsx). Reset links only work for URLs on the
 Supabase Auth -> URL Configuration redirect allowlist (localhost + prod).
+Custom SMTP: auth emails go out via Resend (smtp.resend.com:465, user `resend`,
+API key stored only in Supabase's SMTP settings) from
+`noreply@events.britewing.com`. DNS (DKIM TXT + two SPF CNAMEs on the `events`
+subdomain) is managed in Squarespace Domains for britewing.com, which also
+runs Google Workspace mail — don't touch the root-domain records. Supabase
+email rate limit raised to 60/h; Resend free tier is ~100 emails/day.
 
 ## Working style
 I'm learning to code through this project — I understand the concepts covered
