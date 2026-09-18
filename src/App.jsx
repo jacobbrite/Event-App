@@ -1,5 +1,6 @@
 import Auth from './Auth';
 import CreateEvent from './CreateEvent';
+import ResetPassword from './ResetPassword';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 
@@ -7,6 +8,7 @@ function App() {
   const [session, setSession] = useState(null);
   const [fetchedProfile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState(null);
+  const [isRecovering, setIsRecovering] = useState(false);
   const [event, setEvent] = useState(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
   const [isGoing, setIsGoing] = useState(false);
@@ -16,7 +18,10 @@ function App() {
       setSession(session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((authEvent, session) => {
+      // Arriving from a password-reset email signs the user in with a temporary
+      // session; hold them on the new-password form until they finish.
+      if (authEvent === 'PASSWORD_RECOVERY') setIsRecovering(true);
       setSession(session);
     });
 
@@ -116,6 +121,10 @@ function App() {
 
   if (!session) {
     return <Auth />;
+  }
+
+  if (isRecovering) {
+    return <ResetPassword onDone={() => setIsRecovering(false)} />;
   }
 
   // Ignore a profile left over from a previous login until the new one loads.

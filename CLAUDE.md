@@ -16,6 +16,7 @@ become a product other people can use to host their own events.
   next upcoming event, RSVP/un-RSVP logic, routes between Auth / CreateEvent /
   event page based on state (host check uses `profile.is_host`)
 - `src/Auth.jsx` — signup/login form (email, password, first/last name on signup)
+- `src/ResetPassword.jsx` — new-password form shown after following a reset email link
 - `src/CreateEvent.jsx` — event creation form, only reachable by the host
 - `src/supabaseClient.js` — Supabase client setup, reads from `.env`
 
@@ -59,13 +60,15 @@ become a product other people can use to host their own events.
   logic (`.limit(1)`, soonest upcoming) — no event list/browse view yet
 
 ## Roadmap (not yet built, in rough priority order)
-1. Password reset flow
-2. Soft-delete status on rsvps (`status: going/cancelled`) instead of hard delete
-3. Custom SMTP for auth emails before going live
-4. Recurring/multi-event support (currently one-off events only)
-5. Error/empty state polish (e.g. profile load failure currently shows a raw message)
+1. Soft-delete status on rsvps (`status: going/cancelled`) instead of hard delete
+2. Custom SMTP for auth emails before going live
+3. Recurring/multi-event support (currently one-off events only)
+4. Error/empty state polish (e.g. profile load failure currently shows a raw message)
 
-Done: `profiles` table + `is_host` flag (replaced hardcoded HOST_ID).
+Done: `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); password
+reset flow (Auth.jsx "Forgot password?" -> emailed link -> `PASSWORD_RECOVERY`
+event in App.jsx -> ResetPassword.jsx). Reset links only work for URLs on the
+Supabase Auth -> URL Configuration redirect allowlist (localhost + prod).
 
 ## Working style
 I'm learning to code through this project — I understand the concepts covered
