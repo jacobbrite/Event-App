@@ -10,6 +10,9 @@ become a product other people can use to host their own events.
 - Supabase (Postgres database + auth)
 - GitHub (version control)
 - Vercel (hosting, auto-deploys on push to main)
+- Live site (the URL given to guests): https://events.britewing.com — a CNAME
+  in Squarespace DNS -> Vercel. The old event-app-nine-kappa.vercel.app still
+  works. Both plus http://localhost:5173 must stay on Supabase's redirect allowlist.
 
 ## Architecture
 - `src/App.jsx` — main app: session state, loads the user's profile, fetches the
