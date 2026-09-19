@@ -1,5 +1,6 @@
 import Auth from './Auth';
 import CreateEvent from './CreateEvent';
+import GuestList from './GuestList';
 import ResetPassword from './ResetPassword';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
@@ -11,7 +12,7 @@ function App() {
   const [isRecovering, setIsRecovering] = useState(false);
   const [event, setEvent] = useState(null);
   const [loadingEvent, setLoadingEvent] = useState(true);
-  const [isGoing, setIsGoing] = useState(false);
+  const [fetchedRsvp, setRsvp] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,26 +70,29 @@ function App() {
     async function checkRSVP() {
       const { data } = await supabase
         .from('rsvps')
-        .select('id')
+        .select('id, user_id, status')
         .eq('user_id', session.user.id)
         .eq('event_id', event.id)
         .maybeSingle();
 
-      setIsGoing(!!data);
+      setRsvp(data);
     }
 
     checkRSVP();
   }, [session, event]);
 
   async function handleRSVP() {
-    const name = `${profile.first_name} ${profile.last_name}`;
-    const email = session.user.email;
+    // A guest who cancelled already has a row (one per user per event), so
+    // re-RSVPing flips that row back instead of inserting a new one.
+    const request = rsvp
+      ? supabase.from('rsvps').update({ status: 'going' }).eq('id', rsvp.id)
+      : supabase.from('rsvps').insert({
+          name: `${profile.first_name} ${profile.last_name}`,
+          email: session.user.email,
+          event_id: event.id,
+        });
 
-    const { error } = await supabase.from('rsvps').insert({
-      name,
-      email,
-      event_id: event.id,
-    });
+    const { data, error } = await request.select('id, user_id, status').single();
 
     if (error) {
       console.error('Error saving RSVP:', error);
@@ -96,23 +100,24 @@ function App() {
       return;
     }
 
-    setIsGoing(true);
+    setRsvp(data);
   }
 
   async function handleUnRSVP() {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('rsvps')
-      .delete()
-      .eq('user_id', session.user.id)
-      .eq('event_id', event.id);
+      .update({ status: 'cancelled' })
+      .eq('id', rsvp.id)
+      .select('id, user_id, status')
+      .single();
 
     if (error) {
-      console.error('Error removing RSVP:', error);
+      console.error('Error cancelling RSVP:', error);
       alert('Something went wrong. Please try again.');
       return;
     }
 
-    setIsGoing(false);
+    setRsvp(data);
   }
 
   async function handleLogout() {
@@ -129,6 +134,8 @@ function App() {
 
   // Ignore a profile left over from a previous login until the new one loads.
   const profile = fetchedProfile?.id === session.user.id ? fetchedProfile : null;
+  const rsvp = fetchedRsvp?.user_id === session.user.id ? fetchedRsvp : null;
+  const isGoing = rsvp?.status === 'going';
 
   if (profileError) {
     return <p className="text-center mt-20">Couldn't load your profile: {profileError}</p>;
@@ -185,6 +192,8 @@ function App() {
             RSVP
           </button>
         )}
+
+        {profile.is_host && <GuestList eventId={event.id} refreshKey={rsvp?.status} />}
 
         <button
           onClick={handleLogout}

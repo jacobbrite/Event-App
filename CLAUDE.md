@@ -21,16 +21,19 @@ become a product other people can use to host their own events.
 - `src/Auth.jsx` — signup/login form (email, password, first/last name on signup)
 - `src/ResetPassword.jsx` — new-password form shown after following a reset email link
 - `src/CreateEvent.jsx` — event creation form, only reachable by the host
+- `src/GuestList.jsx` — host-only guest list (going count, going + cancelled RSVPs)
 - `src/supabaseClient.js` — Supabase client setup, reads from `.env`
 
 ## Database schema (Supabase)
 **events**
-- id (uuid, pk), created_at, host_id (uuid, defaults to auth.uid()),
+- id (int8, pk), created_at, host_id (uuid, defaults to auth.uid()),
   title (text), event_time (timestamptz), location (text), description (text)
 
 **rsvps**
 - id (int8, pk), created_at, name (text), email (text),
-  user_id (uuid, references auth.users), event_id (uuid, fk -> events.id)
+  user_id (uuid, defaults to auth.uid(), references auth.users),
+  event_id (int8, fk -> events.id),
+  status (text, not null, default 'going', CHECK in ('going','cancelled'))
 - Composite UNIQUE constraint on (user_id, event_id) — one RSVP per user per event
 
 **profiles** (migration: `supabase/migrations/001_profiles.sql`)
@@ -46,25 +49,28 @@ become a product other people can use to host their own events.
   limited by column-level grant to first_name/last_name only — RLS is per-row,
   so without this a user could set their own `is_host = true`. No INSERT/DELETE
   policies (trigger creates rows)
-- rsvps: INSERT open to anon+authenticated; SELECT and DELETE restricted to
-  `auth.uid() = user_id` (users can only see/remove their own RSVP)
+- rsvps (migrations 002 + 003): INSERT authenticated only, and only as
+  yourself (`auth.uid() = user_id`) — the old open-to-anon policy let anyone
+  insert rows for any user_id. SELECT: own rows, plus all rows for hosts
+  (`profiles.is_host`); policies are OR'd so guests still can't see each other.
+  UPDATE: own rows, and by column-level grant only the `status` column (again
+  RLS is per-row, so without the grant a user could rewrite event_id/email).
+  DELETE: none — cancelling sets `status = 'cancelled'`, history is kept
 
 ## Known temporary decisions (not bugs, just not-yet-generalized)
 - `is_host` is a single boolean on profiles — fine for one host, not a per-event
   roles/ownership model yet (any host can create events, nobody is scoped to
   "their" events)
 - rsvps.name is still a copy of the name at RSVP time, not joined from profiles
-- Un-RSVP hard-deletes the row rather than soft-deleting with a status column
-  — history of cancellations isn't preserved yet
 - Only one event can exist meaningfully at a time in the UI's current fetch
   logic (`.limit(1)`, soonest upcoming) — no event list/browse view yet
 
 ## Roadmap (not yet built, in rough priority order)
-1. Soft-delete status on rsvps (`status: going/cancelled`) instead of hard delete
-2. Recurring/multi-event support (currently one-off events only)
-3. Error/empty state polish (e.g. profile load failure currently shows a raw message)
+1. Recurring/multi-event support (currently one-off events only)
+2. Error/empty state polish (e.g. profile load failure currently shows a raw message)
 
-Done: `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); password
+Done: `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); RSVP
+soft-delete (`status`) with a host guest list; password
 reset flow (Auth.jsx "Forgot password?" -> emailed link -> `PASSWORD_RECOVERY`
 event in App.jsx -> ResetPassword.jsx). Reset links only work for URLs on the
 Supabase Auth -> URL Configuration redirect allowlist (localhost + prod).
