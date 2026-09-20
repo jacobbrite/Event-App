@@ -1,12 +1,32 @@
 import Auth from './Auth';
+import ClubPage from './ClubPage';
+import CreateClub from './CreateClub';
 import CreateEvent from './CreateEvent';
 import EventList from './EventList';
 import EventPage from './EventPage';
+import JoinScreen from './JoinScreen';
 import ProfilePage from './ProfilePage';
 import ResetPassword from './ResetPassword';
 import { Centered, ErrorScreen } from './Screens';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+
+// A club's join link looks like https://events.britewing.com/?join=<code>.
+// The code is stashed in localStorage so it survives signing up, the Google
+// redirect and email confirmation, then removed from the address bar.
+function readPendingJoin() {
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get('join');
+    if (fromUrl) {
+      localStorage.setItem('pendingJoin', fromUrl);
+      window.history.replaceState({}, '', window.location.pathname);
+      return fromUrl;
+    }
+    return localStorage.getItem('pendingJoin');
+  } catch {
+    return null;
+  }
+}
 
 function App() {
   const [session, setSession] = useState(null);
@@ -14,8 +34,10 @@ function App() {
   const [profileError, setProfileError] = useState(null);
   const [profileAttempt, setProfileAttempt] = useState(0);
   const [isRecovering, setIsRecovering] = useState(false);
-  // Which screen is showing: { name: 'list' } | { name: 'event', eventId }
-  // | { name: 'create', template? } | { name: 'profile' }. Plain state, no router yet.
+  const [pendingJoin, setPendingJoin] = useState(readPendingJoin);
+  // Which screen is showing (plain state, no router yet):
+  // { name: 'list' } | { name: 'club', clubId } | { name: 'event', eventId, clubId }
+  // | { name: 'createClub' } | { name: 'createEvent', club, template? } | { name: 'profile' }
   const [view, setView] = useState({ name: 'list' });
 
   useEffect(() => {
@@ -27,7 +49,7 @@ function App() {
       // Arriving from a password-reset email signs the user in with a temporary
       // session; hold them on the new-password form until they finish.
       if (authEvent === 'PASSWORD_RECOVERY') setIsRecovering(true);
-      // Don't let the next person to log in land inside the last person's event.
+      // Don't let the next person to log in land inside the last person's club.
       if (authEvent === 'SIGNED_OUT') setView({ name: 'list' });
       setSession(session);
     });
@@ -41,7 +63,7 @@ function App() {
     async function fetchProfile() {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, is_host, avatar_url')
+        .select('id, first_name, last_name, is_host, is_admin, allowed_types, avatar_url')
         .eq('id', session.user.id)
         .maybeSingle();
 
@@ -58,12 +80,21 @@ function App() {
     setProfileAttempt((n) => n + 1);
   }
 
+  function clearPendingJoin() {
+    try {
+      localStorage.removeItem('pendingJoin');
+    } catch {
+      // storage unavailable: nothing to clear
+    }
+    setPendingJoin(null);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
 
   if (!session) {
-    return <Auth />;
+    return <Auth joinCode={pendingJoin} />;
   }
 
   if (isRecovering) {
@@ -92,23 +123,63 @@ function App() {
     );
   }
 
+  if (pendingJoin) {
+    return (
+      <JoinScreen
+        code={pendingJoin}
+        onJoined={(clubId) => {
+          clearPendingJoin();
+          setView({ name: 'club', clubId });
+        }}
+        onCancel={clearPendingJoin}
+      />
+    );
+  }
+
+  const goHome = () => setView({ name: 'list' });
+
   if (view.name === 'profile') {
     return (
       <ProfilePage
         profile={profile}
         email={session.user.email}
-        onBack={() => setView({ name: 'list' })}
+        onBack={goHome}
         onSaved={(updates) => setProfile({ ...profile, ...updates })}
       />
     );
   }
 
-  if (view.name === 'create') {
+  if (view.name === 'createClub') {
+    return (
+      <CreateClub
+        profile={profile}
+        onCancel={goHome}
+        onCreated={(clubId) => setView({ name: 'club', clubId })}
+      />
+    );
+  }
+
+  if (view.name === 'createEvent') {
     return (
       <CreateEvent
+        club={view.club}
         template={view.template}
-        onCancel={() => setView({ name: 'list' })}
-        onCreated={(eventId) => setView({ name: 'event', eventId })}
+        onCancel={() => setView({ name: 'club', clubId: view.club.id })}
+        onCreated={(eventId) => setView({ name: 'event', eventId, clubId: view.club.id })}
+      />
+    );
+  }
+
+  if (view.name === 'club') {
+    return (
+      <ClubPage
+        clubId={view.clubId}
+        profile={profile}
+        session={session}
+        onBack={goHome}
+        onOpenEvent={(eventId) => setView({ name: 'event', eventId, clubId: view.clubId })}
+        onSchedule={(club, template) => setView({ name: 'createEvent', club, template })}
+        onLogout={handleLogout}
       />
     );
   }
@@ -119,8 +190,9 @@ function App() {
         eventId={view.eventId}
         profile={profile}
         session={session}
-        onBack={() => setView({ name: 'list' })}
-        onScheduleNext={(template) => setView({ name: 'create', template })}
+        onBack={goHome}
+        onOpenClub={(clubId) => setView({ name: 'club', clubId })}
+        onScheduleNext={(club, template) => setView({ name: 'createEvent', club, template })}
         onLogout={handleLogout}
       />
     );
@@ -130,8 +202,9 @@ function App() {
     <EventList
       profile={profile}
       session={session}
-      onOpen={(eventId) => setView({ name: 'event', eventId })}
-      onCreate={() => setView({ name: 'create' })}
+      onOpenEvent={(eventId, clubId) => setView({ name: 'event', eventId, clubId })}
+      onOpenClub={(clubId) => setView({ name: 'club', clubId })}
+      onCreateClub={() => setView({ name: 'createClub' })}
       onProfile={() => setView({ name: 'profile' })}
       onLogout={handleLogout}
     />

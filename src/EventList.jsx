@@ -1,17 +1,27 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { formatEventTime } from './formatEventTime';
+import { typeLabel } from './clubTypes';
 import Avatar from './Avatar';
 
 // Events stay listed for this long after they start, so a party in progress
 // doesn't vanish from the list (the host may still be checking who came).
 const EVENT_GRACE_MS = 6 * 60 * 60 * 1000;
 
-// Deliberately minimal: title and time only. Location and description are
-// fetched by EventPage when a guest opens the event. Which events show up at all
-// is decided by RLS (hosts see all, guests only the ones they're invited to).
-function EventList({ profile, session, onOpen, onCreate, onProfile, onLogout }) {
+// Home screen: upcoming events across your clubs (title, club and time only;
+// location and description load when you open one), and the clubs you belong to.
+// What appears is decided by RLS: members see their clubs' events, admins see all.
+function EventList({
+  profile,
+  session,
+  onOpenEvent,
+  onOpenClub,
+  onCreateClub,
+  onProfile,
+  onLogout,
+}) {
   const [events, setEvents] = useState(null);
+  const [clubs, setClubs] = useState(null);
   const [myRsvps, setMyRsvps] = useState({});
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -20,18 +30,19 @@ function EventList({ profile, session, onOpen, onCreate, onProfile, onLogout }) 
     async function load() {
       const cutoff = new Date(Date.now() - EVENT_GRACE_MS).toISOString();
 
-      const [eventsRes, rsvpsRes] = await Promise.all([
+      const [eventsRes, rsvpsRes, clubsRes] = await Promise.all([
         supabase
           .from('events')
-          .select('id, title, event_time')
+          .select('id, title, event_time, club_id, clubs(name)')
           .gte('event_time', cutoff)
           .order('event_time', { ascending: true }),
         supabase.from('rsvps').select('event_id, status').eq('user_id', session.user.id),
+        supabase.from('clubs').select('id, name, type').order('name', { ascending: true }),
       ]);
 
-      const failure = eventsRes.error || rsvpsRes.error;
+      const failure = eventsRes.error || rsvpsRes.error || clubsRes.error;
       if (failure) {
-        console.error('Error loading events:', failure);
+        console.error('Error loading home screen:', failure);
         setError(failure.message);
         return;
       }
@@ -39,6 +50,7 @@ function EventList({ profile, session, onOpen, onCreate, onProfile, onLogout }) 
       setError(null);
       setMyRsvps(Object.fromEntries(rsvpsRes.data.map((r) => [r.event_id, r.status])));
       setEvents(eventsRes.data);
+      setClubs(clubsRes.data);
     }
 
     load();
@@ -47,8 +59,12 @@ function EventList({ profile, session, onOpen, onCreate, onProfile, onLogout }) 
   function retry() {
     setError(null);
     setEvents(null);
+    setClubs(null);
     setAttempt((n) => n + 1);
   }
+
+  const canHost = profile.is_host || profile.is_admin;
+  const loaded = events && clubs;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -69,32 +85,37 @@ function EventList({ profile, session, onOpen, onCreate, onProfile, onLogout }) 
 
         {error && (
           <div className="text-center">
-            <p className="text-sm text-red-600 mb-3">Couldn't load events: {error}</p>
+            <p className="text-sm text-red-600 mb-3">Couldn't load your events: {error}</p>
             <button onClick={retry} className="text-sm text-blue-600 underline">
               Try again
             </button>
           </div>
         )}
 
-        {!error && !events && <p className="text-center text-gray-500">Loading...</p>}
+        {!error && !loaded && <p className="text-center text-gray-500">Loading...</p>}
 
-        {events && events.length === 0 && (
+        {loaded && events.length === 0 && (
           <p className="text-center text-gray-600">
-            {profile.is_host
-              ? 'No upcoming events yet.'
-              : "You haven't been invited to any upcoming events yet. If you're expecting one, ask the host to invite you."}
+            {clubs.length === 0
+              ? canHost
+                ? 'Create a club to get started.'
+                : "You're not in any clubs yet. Ask a host for their invite link."
+              : 'No upcoming events.'}
           </p>
         )}
 
-        {events && events.length > 0 && (
+        {loaded && events.length > 0 && (
           <ul className="space-y-3">
             {events.map((e) => (
               <li key={e.id}>
                 <button
-                  onClick={() => onOpen(e.id)}
+                  onClick={() => onOpenEvent(e.id, e.club_id)}
                   className="w-full text-left border border-gray-200 rounded-xl px-4 py-3 hover:border-blue-400 hover:bg-blue-50 transition"
                 >
                   <span className="block font-semibold text-gray-900">{e.title}</span>
+                  {e.clubs?.name && (
+                    <span className="block text-xs text-gray-500">{e.clubs.name}</span>
+                  )}
                   <span className="block text-sm text-blue-600">{formatEventTime(e.event_time)}</span>
                   {myRsvps[e.id] === 'going' && (
                     <span className="inline-block mt-1 text-xs font-medium text-green-700 bg-green-50 rounded-full px-2 py-0.5">
@@ -107,12 +128,31 @@ function EventList({ profile, session, onOpen, onCreate, onProfile, onLogout }) 
           </ul>
         )}
 
-        {profile.is_host && (
+        {loaded && clubs.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-sm font-semibold text-gray-500 mb-2">Your clubs</h2>
+            <ul className="space-y-2">
+              {clubs.map((c) => (
+                <li key={c.id}>
+                  <button
+                    onClick={() => onOpenClub(c.id)}
+                    className="w-full text-left flex items-center justify-between border border-gray-200 rounded-xl px-4 py-2 hover:border-blue-400 hover:bg-blue-50 transition"
+                  >
+                    <span className="font-medium text-gray-900">{c.name}</span>
+                    <span className="text-xs text-gray-400">{typeLabel(c.type)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {canHost && (
           <button
-            onClick={onCreate}
+            onClick={onCreateClub}
             className="mt-6 w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition"
           >
-            New event
+            New club
           </button>
         )}
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 
 // Turn Supabase's raw error strings into something a guest can act on.
@@ -15,7 +15,11 @@ function friendlyError(message) {
   return message;
 }
 
-function Auth() {
+// `joinCode` is set when someone arrives through a club's invite link. They can
+// see the club's name here, before signing in, and are asked to confirm joining
+// once they're logged in (see JoinScreen).
+function Auth({ joinCode }) {
+  const [invite, setInvite] = useState(null); // { name } | 'invalid' | null
   const [isSignUp, setIsSignUp] = useState(true);
   const [isForgot, setIsForgot] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -24,6 +28,18 @@ function Auth() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState(null); // { text, isError }
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!joinCode) return;
+
+    async function loadInvite() {
+      const { data, error } = await supabase.rpc('club_preview', { p_code: joinCode });
+      if (error) console.error('Error loading invite:', error);
+      setInvite(data?.[0] ?? 'invalid');
+    }
+
+    loadInvite();
+  }, [joinCode]);
 
   function showError(error) {
     setMessage({ text: friendlyError(error.message), isError: true });
@@ -81,6 +97,22 @@ function Auth() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-sm w-full bg-white rounded-2xl shadow-lg p-8">
+        {invite && (
+          <div
+            className={`mb-6 rounded-xl px-4 py-3 text-sm text-center ${
+              invite === 'invalid' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'
+            }`}
+          >
+            {invite === 'invalid' ? (
+              "This invite link isn't valid. Ask the host for a new one."
+            ) : (
+              <>
+                You've been invited to join <strong>{invite.name}</strong>. Sign in or create an
+                account to continue.
+              </>
+            )}
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">
           {isForgot ? 'Reset your password' : isSignUp ? 'Create an account' : 'Log in'}
         </h1>

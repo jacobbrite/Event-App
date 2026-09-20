@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import GuestList from './GuestList';
-import InviteManager from './InviteManager';
 import { Centered, ErrorScreen } from './Screens';
 import { formatEventTime } from './formatEventTime';
 import { fullName } from './names';
 
-function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout }) {
+function EventPage({ eventId, profile, session, onBack, onOpenClub, onScheduleNext, onLogout }) {
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
@@ -14,13 +13,15 @@ function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout
   const [fetchedRsvp, setRsvp] = useState(null);
   const [rsvpBusy, setRsvpBusy] = useState(false);
   const [rsvpError, setRsvpError] = useState(null);
-  const [showInvites, setShowInvites] = useState(false);
-  const [guestVersion, setGuestVersion] = useState(0);
 
   useEffect(() => {
     async function load() {
       const [eventRes, rsvpRes] = await Promise.all([
-        supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
+        supabase
+          .from('events')
+          .select('*, clubs(id, name, owner_id)')
+          .eq('id', eventId)
+          .maybeSingle(),
         supabase
           .from('rsvps')
           .select('id, user_id, status')
@@ -48,6 +49,8 @@ function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout
 
   const rsvp = fetchedRsvp?.user_id === session.user.id ? fetchedRsvp : null;
   const isGoing = rsvp?.status === 'going';
+  const club = event?.clubs;
+  const canManage = club?.owner_id === session.user.id || profile.is_admin;
 
   async function handleRSVP() {
     setRsvpBusy(true);
@@ -118,9 +121,9 @@ function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout
   if (!event) {
     return (
       <Centered>
-        <p>This event doesn't exist, or you haven't been invited to it.</p>
+        <p>This event doesn't exist, or you're not in its club.</p>
         <button onClick={onBack} className="mt-6 text-sm text-blue-600 underline">
-          ← All events
+          ← Home
         </button>
       </Centered>
     );
@@ -129,16 +132,14 @@ function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
-        <button onClick={onBack} className="text-sm text-gray-500 hover:underline mb-4">
-          ← All events
+        <button
+          onClick={() => onOpenClub(event.club_id)}
+          className="text-sm text-gray-500 hover:underline mb-4"
+        >
+          ← {club?.name ?? 'Club'}
         </button>
 
         <h1 className="text-3xl font-bold text-gray-900 mb-2">{event.title}</h1>
-        {event.series_id && profile.is_host && (
-          <p className="text-xs font-medium text-purple-700 bg-purple-50 rounded-full px-2 py-0.5 inline-block mb-2">
-            Recurring
-          </p>
-        )}
         <p className="text-blue-600 font-medium mb-1">{formatEventTime(event.event_time)}</p>
         <p className="text-gray-500 mb-4">{event.location}</p>
         <p className="text-gray-700">{event.description}</p>
@@ -166,31 +167,16 @@ function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout
 
         {rsvpError && <p className="mt-3 text-center text-sm text-red-600">{rsvpError}</p>}
 
-        {profile.is_host && (
+        {canManage && (
           <>
-            <GuestList eventId={event.id} refreshKey={`${rsvp?.status}-${guestVersion}`} />
+            <GuestList eventId={event.id} clubId={event.club_id} refreshKey={rsvp?.status} />
 
             <button
-              onClick={() => setShowInvites(!showInvites)}
-              className="mt-4 w-full border border-gray-300 text-gray-800 font-semibold py-2 rounded-lg hover:bg-gray-50 transition"
+              onClick={() => onScheduleNext({ id: club.id, name: club.name }, event)}
+              className="mt-4 w-full border border-purple-300 text-purple-700 font-semibold py-2 rounded-lg hover:bg-purple-50 transition"
             >
-              {showInvites ? 'Hide invitations' : 'Manage invitations'}
+              Schedule the next meeting
             </button>
-            {showInvites && (
-              <InviteManager
-                eventId={event.id}
-                onChange={() => setGuestVersion((n) => n + 1)}
-              />
-            )}
-
-            {event.series_id && (
-              <button
-                onClick={() => onScheduleNext(event)}
-                className="mt-3 w-full border border-purple-300 text-purple-700 font-semibold py-2 rounded-lg hover:bg-purple-50 transition"
-              >
-                Schedule next occurrence
-              </button>
-            )}
           </>
         )}
 

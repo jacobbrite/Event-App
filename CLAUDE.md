@@ -3,20 +3,29 @@
 ## Near-term plans (as of Sep 2026)
 - Before Dec 31 the owner will create a handful of test events, and will also
   use the app for a real recurring event — their book club — within about a
-  week of Sep 18. So multi-event support is now the top priority, ahead of the
-  original "one event at a time" assumption. Guests get one link:
-  https://events.britewing.com
+  week of Sep 18. Guests get one link: https://events.britewing.com
+- Product focus: book clubs. The owner wants to invite a limited set of beta
+  hosts who may only create the "book club" type; other types (dinner party,
+  custom) show "Coming soon" for them. The owner (admin) can create any type.
 
-## Direction: book clubs (beta hosts) — decided Sep 2026, not built yet
-- Product focus: book clubs. Beta hosts may only create the "book club" event
-  type; other types (dinner party, custom) show "coming soon" for them. The
-  owner (admin) can create any type.
-- **Do NOT set `is_host` on anyone but the owner yet.** Today `is_host` is a
-  super-user flag: it can read every profile (emails) and every event/guest
-  list. Beta hosts need scoped powers first: see only their own events/clubs
-  and only their own members. Plan: a `clubs` model with members and a join
-  link (replaces "pick from all signed-up users"), an admin vs host distinction,
-  and `events.type` + an allowed-types check in the events INSERT policy.
+## Access model (migrations 006 + 007)
+- `profiles.is_admin` = the app owner: sees everything. `is_host` = may create
+  clubs (beta hosts + admin). `allowed_types` = which club types a host may
+  create (default `{book_club}`; admins get all). Clients can never change any
+  of these — set them in the Supabase dashboard / SQL editor.
+- **To add a beta host:** `update public.profiles set is_host = true where email = '...';`
+  They can then create book clubs only, and see only their own clubs and members.
+- Everything hangs off clubs: a club has members and events. Members see the
+  club's events; hosts see only clubs they own; admins see all. Nobody gets
+  another user's profile row — names/emails come through `club_directory()`,
+  which gives emails only to the club's owner (or an admin).
+- Joining: each club has a private link `?join=<code>`. The code is kept in
+  localStorage across sign-up / Google redirect, then the user confirms on the
+  JoinScreen (`join_club(code)`). Signed-out visitors can only learn the club's
+  name via `club_preview(code)`.
+- One-off events (NYE party) are just a club with one event.
+
+## Book club direction and setup notes
 - Book features, in build order: host picks a book -> members submit books
   (host sets max per person) with type-ahead book search (Google Books / Open
   Library: cover, author, ISBN, page count; generated Goodreads/Libby/Bookshop
@@ -54,33 +63,46 @@ become a product other people can use to host their own events.
   works. Both plus http://localhost:5173 must stay on Supabase's redirect allowlist.
 
 ## Architecture
-- `src/App.jsx` — session, recovery flow, profile load; switches between the
-  list / event / create views with plain state (no router yet)
-- `src/EventList.jsx` — upcoming events (title + time only). Which events appear
-  is decided by RLS: hosts see all, guests only events they're invited to
-- `src/EventPage.jsx` — one event (fetches full details on open), RSVP/cancel,
-  and for hosts: guest list, invitations, "Schedule next occurrence"
-- `src/CreateEvent.jsx` — host-only form: one-time vs recurring, details, guest
-  picker. With a `template` it copies details + guest list from a recurring event
-- `src/GuestPicker.jsx` / `src/InviteManager.jsx` / `src/GuestList.jsx` —
-  host tools: pick people, save invitations to an event, see who's going
-- `src/ProfilePage.jsx` / `src/Avatar.jsx` / `src/names.js` — edit name + photo; round avatar; name helpers (Google users may have no last name)
-- `src/Auth.jsx` — signup/login/forgot-password form, plus "Continue with Google"
+- `src/App.jsx` — session, recovery flow, profile load, pending club join link;
+  switches between screens with plain state (no router yet)
+- `src/EventList.jsx` — home: upcoming events across your clubs (title, club, time
+  only) + your clubs. Which appear is decided by RLS
+- `src/ClubPage.jsx` — one club: meetings, members, host-only invite link
+  (copy / reset), leave/remove, "schedule the next meeting"
+- `src/CreateClub.jsx` — pick a club type (types you're not allowed show "Coming
+  soon") and name it
+- `src/CreateEvent.jsx` — schedule a meeting in a club; pre-filled from the
+  previous meeting
+- `src/EventPage.jsx` — one event (details load on open), RSVP/cancel, and for the
+  club's host: guest list + "schedule the next meeting"
+- `src/GuestList.jsx` — host view: club members and how each answered
+- `src/JoinScreen.jsx` — confirm joining after opening an invite link
+- `src/ProfilePage.jsx` / `src/Avatar.jsx` / `src/names.js` — edit name + photo;
+  round avatar; name helpers (Google users may have no last name)
+- `src/Auth.jsx` — signup/login/forgot-password, "Continue with Google", and a
+  banner naming the club when arriving via an invite link
 - `src/ResetPassword.jsx` — new-password form shown after following a reset email link
-- `src/Screens.jsx`, `src/formatEventTime.js` — shared loading/error screens, date format
+- `src/Screens.jsx`, `src/formatEventTime.js`, `src/clubTypes.js` — shared screens,
+  date format, club type labels
 - `src/supabaseClient.js` — Supabase client setup, reads from `.env`
 
 ## Database schema (Supabase)
 **events**
 - id (int8, pk), created_at, host_id (uuid, defaults to auth.uid()),
-  title (text), event_time (timestamptz), location (text), description (text),
-  series_id (uuid, null = one-time; events sharing a series_id are occurrences
-  of one recurring event — there is no separate series table yet)
+  title, event_time (timestamptz), location, description,
+  club_id (int8, fk -> clubs.id, cascade; NOT NULL after migration 007)
 
-**invitations** (migration 004)
-- id (int8, pk), created_at, event_id (fk -> events.id, cascade),
-  user_id (fk -> profiles.id, cascade), UNIQUE (event_id, user_id)
-- An invitation is what lets a guest see and RSVP to an event
+**clubs** (migration 006)
+- id (int8), created_at, owner_id (uuid -> profiles, default auth.uid()),
+  name, type ('book_club' | 'dinner_party' | 'custom'). A recurring event is just a
+  club with several events; a one-off event is a club with one.
+
+**club_members** — (club_id, user_id) PK, joined_at. The owner is added by the
+`on_club_created` trigger; everyone else joins through `join_club(code)`.
+
+**club_invite_links** — club_id PK, code (random, unique). Separate table so only
+the club's host can read the code (RLS is per row, a column on clubs would be
+visible to every member). "Reset link" = the owner writes a new code.
 
 **rsvps**
 - id (int8, pk), created_at, name (text), email (text),
@@ -91,53 +113,64 @@ become a product other people can use to host their own events.
 
 **profiles** (migration: `supabase/migrations/001_profiles.sql`)
 - id (uuid, pk, references auth.users on delete cascade), created_at,
-  first_name, last_name, is_host (bool, default false),
+  first_name, last_name, is_host (bool, default false), is_admin (bool, default false),
+  allowed_types (text[], default {book_club}), avatar_url,
   email (text, copied at signup by the trigger; not synced if the user later
   changes their auth email)
 - Rows are created by the `on_auth_user_created` trigger (`handle_new_user`,
   security definer) from signup metadata — clients never insert
 
 ## RLS policies
-- `public.is_host()` (security definer) is used by policies instead of querying
-  profiles directly — a profiles policy that queries profiles recurses forever
-- events: SELECT for hosts and for users with an invitation (no longer public);
-  INSERT for hosts only. No UPDATE/DELETE policy yet — edit/delete test events
-  in the Supabase dashboard
-- invitations: SELECT own rows (hosts: all); INSERT/DELETE hosts only; no UPDATE
-- profiles: SELECT own row, plus all rows for hosts (to pick guests). UPDATE
-  restricted to `auth.uid() = id`. UPDATE is also
-  limited by column-level grant to first_name/last_name only — RLS is per-row,
-  so without this a user could set their own `is_host = true`. No INSERT/DELETE
-  policies (trigger creates rows)
-- rsvps (migrations 002-004): INSERT authenticated only, as yourself
-  (`auth.uid() = user_id`), and only for events you're invited to (hosts exempt)
-  — the old open-to-anon policy let anyone insert rows for any user_id. SELECT: own rows, plus all rows for hosts
-  (`profiles.is_host`); policies are OR'd so guests still can't see each other.
-  UPDATE: own rows, and by column-level grant only the `status` column (again
-  RLS is per-row, so without the grant a user could rewrite event_id/email).
-  DELETE: none — cancelling sets `status = 'cancelled'`, history is kept
+- Helpers (all security definer, `search_path = ''`, so a policy can consult
+  profiles/clubs/club_members without recursing through its own RLS):
+  `is_admin()`, `can_host()`, `allowed_club_types()`, `is_club_member(id)`,
+  `is_club_owner(id)`. A profiles policy that queries profiles directly
+  recurses forever, hence the functions.
+- clubs: SELECT for admins, the owner, and members (the `owner_id = auth.uid()`
+  clause matters: an INSERT ... RETURNING is checked before the trigger adds the
+  owner as a member). INSERT only as yourself, if `can_host()` and the type is in
+  `allowed_club_types()`. UPDATE (name only, by column grant) for owner/admin.
+- club_members: SELECT own rows; owners/admins all their club's. No INSERT policy
+  (joining goes through `join_club`). DELETE: members may leave, owners may
+  remove others (owners can't remove themselves).
+- club_invite_links: SELECT/UPDATE(code) for the club's owner or an admin only.
+- events: SELECT for members of the club and admins; INSERT for the club's owner
+  (who can still `can_host()`) and admins. No UPDATE/DELETE policy yet — fix or
+  delete test events in the Supabase dashboard.
+- profiles: SELECT own row, plus all rows for admins. UPDATE by `auth.uid() = id`
+  and, by column-level grant, only first_name / last_name / avatar_url — RLS is
+  per-row, so without the grant a user could set their own `is_admin`. No
+  INSERT/DELETE policies (the trigger creates rows).
+- rsvps: INSERT as yourself for any event you can see (events RLS decides).
+  SELECT own rows, plus all RSVPs for events in clubs you own (admins: all).
+  UPDATE own rows, `status` column only (column grant). DELETE: none — cancelling
+  sets `status = 'cancelled'`, history is kept.
+- Storage `avatars`: public bucket; users can only write inside `<their-user-id>/`.
 
 ## Known temporary decisions (not bugs, just not-yet-generalized)
-- `is_host` is a single boolean on profiles — fine for one host, not a per-event
-  roles/ownership model yet (any host can create events, nobody is scoped to
-  "their" events)
-- rsvps.name is still a copy of the name at RSVP time, not joined from profiles
-- Guests are invited by picking from people who have already signed up — no
-  invite-by-email for people without an account yet
-- Recurring = "duplicate the last occurrence" (details + guest list copied, new
-  date). No automatic rules like "every 2nd Tuesday", no edit-whole-series
+- rsvps.name / email are copies from RSVP time, not joined from profiles
+- Joining is by link only: no invite-by-email for people who haven't signed up,
+  and no approval step (anyone with the link can join)
+- Recurring = "schedule the next meeting" in the same club (details copied, new
+  date). No automatic rules like "every 2nd Tuesday"
 - Upcoming lists include events up to 6 hours past their start, so a running
   event stays visible
+- Members can't yet see who else is going to a meeting (only the host sees the
+  guest list); members can see who is in the club
 - Events created before Sep 20 2026 used a datetime-local value with no timezone,
   which Postgres read as UTC, so their stored time can be off by the creator's
   UTC offset. New events convert from local time correctly
+- Existing per-event invitations were converted to clubs of type 'custom' by
+  migration 006 (one club per event or per old recurring series)
 
 ## Roadmap (not yet built, in rough priority order)
-1. Invite by email (people who haven't signed up yet), and share a link straight
-   to one event (needs a router)
-2. Edit / delete / cancel events from the app; "every 2nd Tuesday" style rules
+1. Book club features: pick/submit a book (with book search), vote, history and
+   ratings, reminders, date polling (see "Book club direction" above)
+2. Edit / delete events and clubs from the app; rename club UI
+3. Invite by email, share a link straight to one event (needs a router)
+4. Google brand verification + privacy policy review (see above)
 
-Done: multi-event list, invite-only events, recurring via duplicate; error/loading states (retry screens, inline RSVP errors, busy buttons,
+Done: clubs with join links, scoped hosts, event types (migrations 006/007); error/loading states (retry screens, inline RSVP errors, busy buttons,
 friendlier auth errors); `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); RSVP
 soft-delete (`status`) with a host guest list; password
 reset flow (Auth.jsx "Forgot password?" -> emailed link -> `PASSWORD_RECOVERY`
