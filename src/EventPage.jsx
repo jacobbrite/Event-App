@@ -4,6 +4,7 @@ import GuestList from './GuestList';
 import InviteManager from './InviteManager';
 import { Centered, ErrorScreen } from './Screens';
 import { formatEventTime } from './formatEventTime';
+import { fullName } from './names';
 
 function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout }) {
   const [event, setEvent] = useState(null);
@@ -57,7 +58,7 @@ function EventPage({ eventId, profile, session, onBack, onScheduleNext, onLogout
     const request = rsvp
       ? supabase.from('rsvps').update({ status: 'going' }).eq('id', rsvp.id)
       : supabase.from('rsvps').insert({
-          name: `${profile.first_name} ${profile.last_name}`,
+          name: fullName(profile),
           email: session.user.email,
           event_id: event.id,
         });

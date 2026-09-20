@@ -7,6 +7,38 @@
   original "one event at a time" assumption. Guests get one link:
   https://events.britewing.com
 
+## Direction: book clubs (beta hosts) — decided Sep 2026, not built yet
+- Product focus: book clubs. Beta hosts may only create the "book club" event
+  type; other types (dinner party, custom) show "coming soon" for them. The
+  owner (admin) can create any type.
+- **Do NOT set `is_host` on anyone but the owner yet.** Today `is_host` is a
+  super-user flag: it can read every profile (emails) and every event/guest
+  list. Beta hosts need scoped powers first: see only their own events/clubs
+  and only their own members. Plan: a `clubs` model with members and a join
+  link (replaces "pick from all signed-up users"), an admin vs host distinction,
+  and `events.type` + an allowed-types check in the events INSERT policy.
+- Book features, in build order: host picks a book -> members submit books
+  (host sets max per person) with type-ahead book search (Google Books / Open
+  Library: cover, author, ISBN, page count; generated Goodreads/Libby/Bookshop
+  links; paste-a-link and manual fallbacks) -> approval or ranked-choice vote ->
+  bracket voting -> reading history + ratings, reminders, date availability poll.
+- Profiles (done, migration 005): edit name + avatar (public Storage bucket
+  `avatars`, path `<user-id>/avatar.jpg`, users can only write their own folder).
+- Google sign-in (done): Supabase OAuth provider -> Google Cloud project
+  `event-app` under the britewing.com organization, OAuth client type Web
+  application, redirect URI `https://<supabase-project-ref>.supabase.co/auth/v1/callback`
+  (a typo here gives `redirect_uri_mismatch`). Consent screen audience is
+  External and published. The signup trigger reads Google's metadata
+  (full_name / given_name / picture). Signing in with Google using an email that
+  already has an account links to that account.
+- Google account chooser currently says "to continue to <ref>.supabase.co".
+  Fix = Google brand verification (Auth Platform -> Branding: app name, home
+  page, privacy + terms links, authorized domain britewing.com verified in
+  Search Console) or a paid Supabase custom auth domain. Not done yet.
+- Legal: draft `public/privacy.html` and `public/terms.html` (AI-written from how
+  the app works, NOT reviewed by a lawyer). Keep them in sync with what data the
+  app collects. Contact email in them is jacob@britewing.com.
+
 ## What this is
 A web app for hosting recurring events with RSVP, starting as a personal tool
 for a weekly event (first one: NYE party, Dec 31 2026), eventually meant to
@@ -32,7 +64,8 @@ become a product other people can use to host their own events.
   picker. With a `template` it copies details + guest list from a recurring event
 - `src/GuestPicker.jsx` / `src/InviteManager.jsx` / `src/GuestList.jsx` —
   host tools: pick people, save invitations to an event, see who's going
-- `src/Auth.jsx` — signup/login/forgot-password form
+- `src/ProfilePage.jsx` / `src/Avatar.jsx` / `src/names.js` — edit name + photo; round avatar; name helpers (Google users may have no last name)
+- `src/Auth.jsx` — signup/login/forgot-password form, plus "Continue with Google"
 - `src/ResetPassword.jsx` — new-password form shown after following a reset email link
 - `src/Screens.jsx`, `src/formatEventTime.js` — shared loading/error screens, date format
 - `src/supabaseClient.js` — Supabase client setup, reads from `.env`

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { formatEventTime } from './formatEventTime';
+import Avatar from './Avatar';
 
 // Events stay listed for this long after they start, so a party in progress
 // doesn't vanish from the list (the host may still be checking who came).
@@ -9,7 +10,7 @@ const EVENT_GRACE_MS = 6 * 60 * 60 * 1000;
 // Deliberately minimal: title and time only. Location and description are
 // fetched by EventPage when a guest opens the event. Which events show up at all
 // is decided by RLS (hosts see all, guests only the ones they're invited to).
-function EventList({ profile, session, onOpen, onCreate, onLogout }) {
+function EventList({ profile, session, onOpen, onCreate, onProfile, onLogout }) {
   const [events, setEvents] = useState(null);
   const [myRsvps, setMyRsvps] = useState({});
   const [error, setError] = useState(null);
@@ -52,8 +53,19 @@ function EventList({ profile, session, onOpen, onCreate, onLogout }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Upcoming events</h1>
-        <p className="text-sm text-gray-500 mb-6">Hi {profile.first_name}!</p>
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Upcoming events</h1>
+            <p className="text-sm text-gray-500">Hi {profile.first_name ?? 'there'}!</p>
+          </div>
+          <button
+            onClick={onProfile}
+            aria-label="Your profile"
+            className="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <Avatar profile={profile} size={40} />
+          </button>
+        </div>
 
         {error && (
           <div className="text-center">

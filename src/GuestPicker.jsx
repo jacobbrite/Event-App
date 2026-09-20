@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import { fullName } from './names';
 
 // Checklist of everyone who has signed up (hosts excluded), with a filter box.
 // Purely a selector: the parent decides what a change means (remember it, or
@@ -87,9 +88,7 @@ function GuestPicker({ selectedIds, onChange, disabled }) {
                 onChange={(e) => onChange([p.id], e.target.checked)}
               />
               <span>
-                <span className="text-gray-900">
-                  {p.first_name} {p.last_name}
-                </span>
+                <span className="text-gray-900">{fullName(p)}</span>
                 <span className="block text-xs text-gray-400">{p.email}</span>
               </span>
             </label>

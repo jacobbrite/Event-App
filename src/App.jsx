@@ -2,6 +2,7 @@ import Auth from './Auth';
 import CreateEvent from './CreateEvent';
 import EventList from './EventList';
 import EventPage from './EventPage';
+import ProfilePage from './ProfilePage';
 import ResetPassword from './ResetPassword';
 import { Centered, ErrorScreen } from './Screens';
 import { useState, useEffect } from 'react';
@@ -14,7 +15,7 @@ function App() {
   const [profileAttempt, setProfileAttempt] = useState(0);
   const [isRecovering, setIsRecovering] = useState(false);
   // Which screen is showing: { name: 'list' } | { name: 'event', eventId }
-  // | { name: 'create', template? }. Plain state, no router yet.
+  // | { name: 'create', template? } | { name: 'profile' }. Plain state, no router yet.
   const [view, setView] = useState({ name: 'list' });
 
   useEffect(() => {
@@ -40,7 +41,7 @@ function App() {
     async function fetchProfile() {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, is_host')
+        .select('id, first_name, last_name, is_host, avatar_url')
         .eq('id', session.user.id)
         .maybeSingle();
 
@@ -91,6 +92,17 @@ function App() {
     );
   }
 
+  if (view.name === 'profile') {
+    return (
+      <ProfilePage
+        profile={profile}
+        email={session.user.email}
+        onBack={() => setView({ name: 'list' })}
+        onSaved={(updates) => setProfile({ ...profile, ...updates })}
+      />
+    );
+  }
+
   if (view.name === 'create') {
     return (
       <CreateEvent
@@ -120,6 +132,7 @@ function App() {
       session={session}
       onOpen={(eventId) => setView({ name: 'event', eventId })}
       onCreate={() => setView({ name: 'create' })}
+      onProfile={() => setView({ name: 'profile' })}
       onLogout={handleLogout}
     />
   );
