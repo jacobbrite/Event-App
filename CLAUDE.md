@@ -1,5 +1,12 @@
 # Event App
 
+## Near-term plans (as of Sep 2026)
+- Before Dec 31 the owner will create a handful of test events, and will also
+  use the app for a real recurring event — their book club — within about a
+  week of Sep 18. So multi-event support is now the top priority, ahead of the
+  original "one event at a time" assumption. Guests get one link:
+  https://events.britewing.com
+
 ## What this is
 A web app for hosting recurring events with RSVP, starting as a personal tool
 for a weekly event (first one: NYE party, Dec 31 2026), eventually meant to
@@ -63,13 +70,17 @@ become a product other people can use to host their own events.
   "their" events)
 - rsvps.name is still a copy of the name at RSVP time, not joined from profiles
 - Only one event can exist meaningfully at a time in the UI's current fetch
-  logic (`.limit(1)`, soonest upcoming) — no event list/browse view yet
+  logic (`.limit(1)`, soonest upcoming, from 6 hours before now so a running
+  event stays visible) — no event list/browse view yet, and the host create form
+  only appears when there is no upcoming event
 
 ## Roadmap (not yet built, in rough priority order)
-1. Recurring/multi-event support (currently one-off events only)
-2. Error/empty state polish (e.g. profile load failure currently shows a raw message)
+1. Recurring/multi-event support (currently one-off events only; needed for the
+   book club and for test events — a host can only create an event when none
+   are upcoming, and guests only ever see the single soonest event)
 
-Done: `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); RSVP
+Done: error/loading states (retry screens, inline RSVP errors, busy buttons,
+friendlier auth errors); `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); RSVP
 soft-delete (`status`) with a host guest list; password
 reset flow (Auth.jsx "Forgot password?" -> emailed link -> `PASSWORD_RECOVERY`
 event in App.jsx -> ResetPassword.jsx). Reset links only work for URLs on the

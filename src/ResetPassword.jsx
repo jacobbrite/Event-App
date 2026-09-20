@@ -5,6 +5,7 @@ function ResetPassword({ onDone }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -15,7 +16,10 @@ function ResetPassword({ onDone }) {
       return;
     }
 
+    setBusy(true);
     const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+
     if (error) {
       setMessage(error.message);
       return;
@@ -33,10 +37,11 @@ function ResetPassword({ onDone }) {
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
             type="password"
-            placeholder="New password"
+            placeholder="New password (at least 6 characters)"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={6}
             className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <input
@@ -49,13 +54,14 @@ function ResetPassword({ onDone }) {
           />
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition"
+            disabled={busy}
+            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition disabled:opacity-50"
           >
-            Update Password
+            {busy ? 'Updating...' : 'Update Password'}
           </button>
         </form>
         {message && (
-          <p className="mt-4 text-center text-sm text-gray-600">{message}</p>
+          <p className="mt-4 text-center text-sm text-red-600">{message}</p>
         )}
       </div>
     </div>
