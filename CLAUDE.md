@@ -22,19 +22,32 @@ become a product other people can use to host their own events.
   works. Both plus http://localhost:5173 must stay on Supabase's redirect allowlist.
 
 ## Architecture
-- `src/App.jsx` — main app: session state, loads the user's profile, fetches the
-  next upcoming event, RSVP/un-RSVP logic, routes between Auth / CreateEvent /
-  event page based on state (host check uses `profile.is_host`)
-- `src/Auth.jsx` — signup/login form (email, password, first/last name on signup)
+- `src/App.jsx` — session, recovery flow, profile load; switches between the
+  list / event / create views with plain state (no router yet)
+- `src/EventList.jsx` — upcoming events (title + time only). Which events appear
+  is decided by RLS: hosts see all, guests only events they're invited to
+- `src/EventPage.jsx` — one event (fetches full details on open), RSVP/cancel,
+  and for hosts: guest list, invitations, "Schedule next occurrence"
+- `src/CreateEvent.jsx` — host-only form: one-time vs recurring, details, guest
+  picker. With a `template` it copies details + guest list from a recurring event
+- `src/GuestPicker.jsx` / `src/InviteManager.jsx` / `src/GuestList.jsx` —
+  host tools: pick people, save invitations to an event, see who's going
+- `src/Auth.jsx` — signup/login/forgot-password form
 - `src/ResetPassword.jsx` — new-password form shown after following a reset email link
-- `src/CreateEvent.jsx` — event creation form, only reachable by the host
-- `src/GuestList.jsx` — host-only guest list (going count, going + cancelled RSVPs)
+- `src/Screens.jsx`, `src/formatEventTime.js` — shared loading/error screens, date format
 - `src/supabaseClient.js` — Supabase client setup, reads from `.env`
 
 ## Database schema (Supabase)
 **events**
 - id (int8, pk), created_at, host_id (uuid, defaults to auth.uid()),
-  title (text), event_time (timestamptz), location (text), description (text)
+  title (text), event_time (timestamptz), location (text), description (text),
+  series_id (uuid, null = one-time; events sharing a series_id are occurrences
+  of one recurring event — there is no separate series table yet)
+
+**invitations** (migration 004)
+- id (int8, pk), created_at, event_id (fk -> events.id, cascade),
+  user_id (fk -> profiles.id, cascade), UNIQUE (event_id, user_id)
+- An invitation is what lets a guest see and RSVP to an event
 
 **rsvps**
 - id (int8, pk), created_at, name (text), email (text),
@@ -45,20 +58,27 @@ become a product other people can use to host their own events.
 
 **profiles** (migration: `supabase/migrations/001_profiles.sql`)
 - id (uuid, pk, references auth.users on delete cascade), created_at,
-  first_name, last_name, is_host (bool, default false)
+  first_name, last_name, is_host (bool, default false),
+  email (text, copied at signup by the trigger; not synced if the user later
+  changes their auth email)
 - Rows are created by the `on_auth_user_created` trigger (`handle_new_user`,
   security definer) from signup metadata — clients never insert
 
 ## RLS policies
-- events: SELECT open to anon+authenticated; INSERT restricted to users whose
-  profile has `is_host = true`
-- profiles: SELECT and UPDATE restricted to `auth.uid() = id`. UPDATE is also
+- `public.is_host()` (security definer) is used by policies instead of querying
+  profiles directly — a profiles policy that queries profiles recurses forever
+- events: SELECT for hosts and for users with an invitation (no longer public);
+  INSERT for hosts only. No UPDATE/DELETE policy yet — edit/delete test events
+  in the Supabase dashboard
+- invitations: SELECT own rows (hosts: all); INSERT/DELETE hosts only; no UPDATE
+- profiles: SELECT own row, plus all rows for hosts (to pick guests). UPDATE
+  restricted to `auth.uid() = id`. UPDATE is also
   limited by column-level grant to first_name/last_name only — RLS is per-row,
   so without this a user could set their own `is_host = true`. No INSERT/DELETE
   policies (trigger creates rows)
-- rsvps (migrations 002 + 003): INSERT authenticated only, and only as
-  yourself (`auth.uid() = user_id`) — the old open-to-anon policy let anyone
-  insert rows for any user_id. SELECT: own rows, plus all rows for hosts
+- rsvps (migrations 002-004): INSERT authenticated only, as yourself
+  (`auth.uid() = user_id`), and only for events you're invited to (hosts exempt)
+  — the old open-to-anon policy let anyone insert rows for any user_id. SELECT: own rows, plus all rows for hosts
   (`profiles.is_host`); policies are OR'd so guests still can't see each other.
   UPDATE: own rows, and by column-level grant only the `status` column (again
   RLS is per-row, so without the grant a user could rewrite event_id/email).
@@ -69,17 +89,22 @@ become a product other people can use to host their own events.
   roles/ownership model yet (any host can create events, nobody is scoped to
   "their" events)
 - rsvps.name is still a copy of the name at RSVP time, not joined from profiles
-- Only one event can exist meaningfully at a time in the UI's current fetch
-  logic (`.limit(1)`, soonest upcoming, from 6 hours before now so a running
-  event stays visible) — no event list/browse view yet, and the host create form
-  only appears when there is no upcoming event
+- Guests are invited by picking from people who have already signed up — no
+  invite-by-email for people without an account yet
+- Recurring = "duplicate the last occurrence" (details + guest list copied, new
+  date). No automatic rules like "every 2nd Tuesday", no edit-whole-series
+- Upcoming lists include events up to 6 hours past their start, so a running
+  event stays visible
+- Events created before Sep 20 2026 used a datetime-local value with no timezone,
+  which Postgres read as UTC, so their stored time can be off by the creator's
+  UTC offset. New events convert from local time correctly
 
 ## Roadmap (not yet built, in rough priority order)
-1. Recurring/multi-event support (currently one-off events only; needed for the
-   book club and for test events — a host can only create an event when none
-   are upcoming, and guests only ever see the single soonest event)
+1. Invite by email (people who haven't signed up yet), and share a link straight
+   to one event (needs a router)
+2. Edit / delete / cancel events from the app; "every 2nd Tuesday" style rules
 
-Done: error/loading states (retry screens, inline RSVP errors, busy buttons,
+Done: multi-event list, invite-only events, recurring via duplicate; error/loading states (retry screens, inline RSVP errors, busy buttons,
 friendlier auth errors); `profiles` table + `is_host` flag (replaced hardcoded HOST_ID); RSVP
 soft-delete (`status`) with a host guest list; password
 reset flow (Auth.jsx "Forgot password?" -> emailed link -> `PASSWORD_RECOVERY`
