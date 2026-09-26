@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { fullName } from './names';
 
-// Host-only overview of a club's members and how each answered for one event.
+// Owner view: everyone who can see this event and how each answered. For a club
+// that's its members; for a one-time event it's the people you invited.
 // Membership + emails come from club_directory(), which only hands emails to the
-// club's host; RSVP rows are readable by the club's host through RLS.
-function GuestList({ eventId, clubId, refreshKey }) {
+// club's owners; RSVP rows are readable by owners through RLS.
+function GuestList({ eventId, clubId, isOneTime, refreshKey }) {
   const [guests, setGuests] = useState(null);
   const [error, setError] = useState(null);
 
@@ -31,7 +32,7 @@ function GuestList({ eventId, clubId, refreshKey }) {
           name: fullName(m),
           email: m.email ?? '',
           // No RSVP row yet means they haven't answered.
-          status: statusByUser[m.user_id] ?? 'invited',
+          status: statusByUser[m.user_id] ?? 'no_response',
         })),
       );
     }
@@ -47,19 +48,23 @@ function GuestList({ eventId, clubId, refreshKey }) {
     return <p className="mt-6 text-sm text-gray-500">Loading guest list...</p>;
   }
 
-  const going = guests.filter((g) => g.status === 'going');
-  const noResponse = guests.filter((g) => g.status === 'invited');
-  const cancelled = guests.filter((g) => g.status === 'cancelled');
+  const by = (status) => guests.filter((g) => g.status === status);
+  const going = by('going');
+  const maybe = by('maybe');
+  const total = guests.length;
 
   return (
     <div className="mt-8 border-t border-gray-200 pt-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-3">
-        Guest list · {going.length} going · {guests.length} in club
+        Guest list · {going.length} going
+        {maybe.length > 0 && ` · ${maybe.length} maybe`} · {total}{' '}
+        {isOneTime ? 'invited' : total === 1 ? 'member' : 'members'}
       </h2>
 
       <Group title="Going" people={going} tone="text-gray-800" />
-      <Group title="No response yet" people={noResponse} tone="text-gray-500" />
-      <Group title="Cancelled" people={cancelled} tone="text-gray-400" />
+      <Group title="Maybe" people={maybe} tone="text-gray-700" />
+      <Group title="No response yet" people={by('no_response')} tone="text-gray-500" />
+      <Group title="Can't go" people={by('not_going')} tone="text-gray-400" />
     </div>
   );
 }

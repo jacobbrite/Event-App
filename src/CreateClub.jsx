@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { supabase } from './supabaseClient';
 import { CLUB_TYPES } from './clubTypes';
+import { PageHeader } from './Screens';
 
 const inputClass =
   'w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500';
 
-// Create a club. Types you aren't allowed to host yet are shown as "Coming soon";
+// Create a club. Types you aren't allowed to create yet are shown as "Coming soon";
 // the database enforces the same rule (clubs INSERT policy), this is just the UI.
-function CreateClub({ profile, onCancel, onCreated }) {
+function CreateClub({ profile, onCancel, onCreated, onLogout }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('book_club');
   const [busy, setBusy] = useState(false);
@@ -40,10 +41,11 @@ function CreateClub({ profile, onCancel, onCreated }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
-        <button onClick={onCancel} className="text-sm text-gray-500 hover:underline mb-4">
-          ← Back
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Create a club</h1>
+        <PageHeader backLabel="My events" onBack={onCancel} onLogout={onLogout} />
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">Create a club</h1>
+        <p className="text-sm text-gray-500 mb-6">
+          A club is a group that meets again and again. For a single event, use "New event" instead.
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <fieldset>

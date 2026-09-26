@@ -1,16 +1,21 @@
 import { useState } from 'react';
 import { supabase } from './supabaseClient';
+import HostPicker from './HostPicker';
+import { PageHeader } from './Screens';
 
 const inputClass =
   'w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500';
 
-// Schedule an event (a meeting) in a club. With `template` (the club's previous
-// event) the details are pre-filled so you only need to pick a new date.
-function CreateEvent({ club, template, onCancel, onCreated }) {
+// Two uses:
+//  - with `club`: schedule a meeting in that club (pre-filled from `template`,
+//    the previous meeting, so you only pick a new date);
+//  - without a club: create a one-time event on its own.
+function CreateEvent({ club, template, onCancel, onCreated, onLogout }) {
   const [title, setTitle] = useState(template?.title ?? '');
   const [eventTime, setEventTime] = useState('');
   const [location, setLocation] = useState(template?.location ?? '');
   const [description, setDescription] = useState(template?.description ?? '');
+  const [hostedBy, setHostedBy] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -19,48 +24,73 @@ function CreateEvent({ club, template, onCancel, onCreated }) {
     setError(null);
     setBusy(true);
 
-    const { data, error } = await supabase
-      .from('events')
-      .insert({
-        club_id: club.id,
-        title,
-        // datetime-local has no timezone; convert from the browser's local time
-        // so the stored moment is right for everyone.
-        event_time: new Date(eventTime).toISOString(),
-        location,
-        description,
-      })
-      .select('id')
-      .single();
+    // datetime-local has no timezone; convert from the browser's local time so
+    // the stored moment is right for everyone.
+    const when = new Date(eventTime).toISOString();
+
+    let eventId;
+    let failure;
+
+    if (club) {
+      const { data, error } = await supabase
+        .from('events')
+        .insert({
+          club_id: club.id,
+          title,
+          event_time: when,
+          location,
+          description,
+          hosted_by: hostedBy,
+        })
+        .select('id')
+        .single();
+      eventId = data?.id;
+      failure = error;
+    } else {
+      // One function creates the hidden club and the event together, so a
+      // failure can't leave one without the other.
+      const { data, error } = await supabase.rpc('create_one_time_event', {
+        p_title: title,
+        p_event_time: when,
+        p_location: location,
+        p_description: description,
+      });
+      eventId = data;
+      failure = error;
+    }
 
     setBusy(false);
 
-    if (error) {
-      console.error('Error creating event:', error);
-      setError(error.message);
+    if (failure) {
+      console.error('Error creating event:', failure);
+      setError(failure.message);
       return;
     }
 
-    onCreated(data.id);
+    onCreated(eventId);
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
-        <button onClick={onCancel} className="text-sm text-gray-500 hover:underline mb-4">
-          ← {club.name}
-        </button>
+        <PageHeader
+          backLabel={club ? club.name : 'My events'}
+          onBack={onCancel}
+          onLogout={onLogout}
+        />
         <h1 className="text-2xl font-bold text-gray-900 mb-1">
-          {template ? 'Schedule the next meeting' : 'Schedule a meeting'}
+          {!club ? 'Create an event' : template ? 'Schedule the next meeting' : 'Schedule a meeting'}
         </h1>
         <p className="text-sm text-gray-500 mb-6">
-          Everyone in {club.name} will be able to see it and RSVP.
+          {club
+            ? `Everyone in ${club.name} will be able to see it and RSVP.`
+            : "It's a single event. You'll get a private link to invite guests once it's created."}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
             type="text"
-            placeholder="Title (e.g. October meeting)"
+            placeholder={club ? 'Title (e.g. October meeting)' : 'Event title'}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
@@ -89,6 +119,7 @@ function CreateEvent({ club, template, onCancel, onCreated }) {
             rows={3}
             className={inputClass}
           />
+          {club && <HostPicker clubId={club.id} value={hostedBy} onChange={setHostedBy} />}
           <button
             type="submit"
             disabled={busy}

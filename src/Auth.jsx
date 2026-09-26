@@ -104,11 +104,11 @@ function Auth({ joinCode }) {
             }`}
           >
             {invite === 'invalid' ? (
-              "This invite link isn't valid. Ask the host for a new one."
+              "This invite link isn't valid. Ask the person who invited you for a new one."
             ) : (
               <>
-                You've been invited to join <strong>{invite.name}</strong>. Sign in or create an
-                account to continue.
+                You've been invited to {invite.type === 'one_time' ? '' : 'join '}
+                <strong>{invite.name}</strong>. Sign in or create an account to continue.
               </>
             )}
           </div>

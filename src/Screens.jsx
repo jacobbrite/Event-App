@@ -8,6 +8,26 @@ export function Centered({ children }) {
   );
 }
 
+// Top row of every inner page: a clear, prominent way back on the left, and a
+// small, quiet Log out on the right (so it's never hit by accident).
+export function PageHeader({ backLabel, onBack, onLogout }) {
+  return (
+    <div className="flex items-center justify-between mb-6">
+      <button
+        onClick={onBack}
+        className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 font-semibold text-sm px-4 py-2 rounded-lg hover:bg-blue-100 transition"
+      >
+        <span aria-hidden="true">←</span> {backLabel}
+      </button>
+      {onLogout && (
+        <button onClick={onLogout} className="text-xs text-gray-400 hover:text-gray-600">
+          Log out
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ErrorScreen({ title, detail, onRetry, onLogout }) {
   return (
     <Centered>
@@ -20,11 +40,8 @@ export function ErrorScreen({ title, detail, onRetry, onLogout }) {
         >
           Try again
         </button>
-        <button
-          onClick={onLogout}
-          className="mt-3 w-full bg-gray-200 text-gray-800 font-semibold py-2 rounded-lg hover:bg-gray-300 transition"
-        >
-          Log Out
+        <button onClick={onLogout} className="mt-4 text-xs text-gray-400 hover:text-gray-600">
+          Log out
         </button>
       </div>
     </Centered>

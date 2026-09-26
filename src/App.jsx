@@ -2,9 +2,12 @@ import Auth from './Auth';
 import ClubPage from './ClubPage';
 import CreateClub from './CreateClub';
 import CreateEvent from './CreateEvent';
+import CreatePoll from './CreatePoll';
+import EditEvent from './EditEvent';
 import EventList from './EventList';
 import EventPage from './EventPage';
 import JoinScreen from './JoinScreen';
+import PollPage from './PollPage';
 import ProfilePage from './ProfilePage';
 import ResetPassword from './ResetPassword';
 import { Centered, ErrorScreen } from './Screens';
@@ -37,7 +40,8 @@ function App() {
   const [pendingJoin, setPendingJoin] = useState(readPendingJoin);
   // Which screen is showing (plain state, no router yet):
   // { name: 'list' } | { name: 'club', clubId } | { name: 'event', eventId, clubId }
-  // | { name: 'createClub' } | { name: 'createEvent', club, template? } | { name: 'profile' }
+  // | { name: 'createClub' } | { name: 'createEvent', club?, template? } | { name: 'profile' }
+  // | { name: 'editEvent', eventId } | { name: 'poll', pollId } | { name: 'createPoll', club, template? }
   const [view, setView] = useState({ name: 'list' });
 
   useEffect(() => {
@@ -63,7 +67,7 @@ function App() {
     async function fetchProfile() {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, is_host, is_admin, allowed_types, avatar_url')
+        .select('id, first_name, last_name, is_organizer, is_admin, allowed_types, avatar_url')
         .eq('id', session.user.id)
         .maybeSingle();
 
@@ -127,9 +131,9 @@ function App() {
     return (
       <JoinScreen
         code={pendingJoin}
-        onJoined={(clubId) => {
+        onJoined={(clubId, eventId) => {
           clearPendingJoin();
-          setView({ name: 'club', clubId });
+          setView(eventId ? { name: 'event', eventId, clubId } : { name: 'club', clubId });
         }}
         onCancel={clearPendingJoin}
       />
@@ -145,6 +149,7 @@ function App() {
         email={session.user.email}
         onBack={goHome}
         onSaved={(updates) => setProfile({ ...profile, ...updates })}
+        onLogout={handleLogout}
       />
     );
   }
@@ -155,17 +160,56 @@ function App() {
         profile={profile}
         onCancel={goHome}
         onCreated={(clubId) => setView({ name: 'club', clubId })}
+        onLogout={handleLogout}
       />
     );
   }
 
+  // A one-time event has no club (club is null); a meeting belongs to `view.club`.
   if (view.name === 'createEvent') {
     return (
       <CreateEvent
+        club={view.club ?? null}
+        template={view.template}
+        onCancel={() => (view.club ? setView({ name: 'club', clubId: view.club.id }) : goHome())}
+        onCreated={(eventId) => setView({ name: 'event', eventId })}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (view.name === 'editEvent') {
+    return (
+      <EditEvent
+        eventId={view.eventId}
+        session={session}
+        onBack={() => setView({ name: 'event', eventId: view.eventId })}
+        onSaved={() => setView({ name: 'event', eventId: view.eventId })}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (view.name === 'createPoll') {
+    return (
+      <CreatePoll
         club={view.club}
         template={view.template}
         onCancel={() => setView({ name: 'club', clubId: view.club.id })}
-        onCreated={(eventId) => setView({ name: 'event', eventId, clubId: view.club.id })}
+        onCreated={(pollId) => setView({ name: 'poll', pollId })}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (view.name === 'poll') {
+    return (
+      <PollPage
+        pollId={view.pollId}
+        session={session}
+        onBack={(clubId) => setView({ name: 'club', clubId })}
+        onOpenEvent={(eventId) => setView({ name: 'event', eventId })}
+        onLogout={handleLogout}
       />
     );
   }
@@ -174,11 +218,12 @@ function App() {
     return (
       <ClubPage
         clubId={view.clubId}
-        profile={profile}
         session={session}
         onBack={goHome}
         onOpenEvent={(eventId) => setView({ name: 'event', eventId, clubId: view.clubId })}
         onSchedule={(club, template) => setView({ name: 'createEvent', club, template })}
+        onOpenPoll={(pollId) => setView({ name: 'poll', pollId })}
+        onCreatePoll={(club, template) => setView({ name: 'createPoll', club, template })}
         onLogout={handleLogout}
       />
     );
@@ -193,6 +238,7 @@ function App() {
         onBack={goHome}
         onOpenClub={(clubId) => setView({ name: 'club', clubId })}
         onScheduleNext={(club, template) => setView({ name: 'createEvent', club, template })}
+        onEdit={() => setView({ name: 'editEvent', eventId: view.eventId })}
         onLogout={handleLogout}
       />
     );
@@ -205,6 +251,8 @@ function App() {
       onOpenEvent={(eventId, clubId) => setView({ name: 'event', eventId, clubId })}
       onOpenClub={(clubId) => setView({ name: 'club', clubId })}
       onCreateClub={() => setView({ name: 'createClub' })}
+      onCreateEvent={() => setView({ name: 'createEvent' })}
+      onOpenPoll={(pollId) => setView({ name: 'poll', pollId })}
       onProfile={() => setView({ name: 'profile' })}
       onLogout={handleLogout}
     />

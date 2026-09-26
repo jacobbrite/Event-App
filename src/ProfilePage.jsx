@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import Avatar from './Avatar';
+import { PageHeader } from './Screens';
 
 const inputClass =
   'w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -26,7 +27,7 @@ async function resizeToSquareJpeg(file, size = 256) {
   });
 }
 
-function ProfilePage({ profile, email, onBack, onSaved }) {
+function ProfilePage({ profile, email, onBack, onSaved, onLogout }) {
   const [firstName, setFirstName] = useState(profile.first_name ?? '');
   const [lastName, setLastName] = useState(profile.last_name ?? '');
   const [newPhoto, setNewPhoto] = useState(null); // { blob, previewUrl }
@@ -107,9 +108,7 @@ function ProfilePage({ profile, email, onBack, onSaved }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="max-w-sm w-full bg-white rounded-2xl shadow-lg p-8">
-        <button onClick={onBack} className="text-sm text-gray-500 hover:underline mb-4">
-          ← Back
-        </button>
+        <PageHeader backLabel="My events" onBack={onBack} onLogout={onLogout} />
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Your profile</h1>
 
         <div className="flex flex-col items-center mb-6">
