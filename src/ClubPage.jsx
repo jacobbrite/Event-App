@@ -21,6 +21,8 @@ function ClubPage({
   onSchedule,
   onOpenPoll,
   onCreatePoll,
+  onOpenRound,
+  onCreateRound,
   onLogout,
 }) {
   const [club, setClub] = useState(null);
@@ -28,6 +30,7 @@ function ClubPage({
   const [past, setPast] = useState([]);
   const [members, setMembers] = useState([]);
   const [polls, setPolls] = useState([]);
+  const [round, setRound] = useState(null); // the club's book vote in progress, if any
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -36,7 +39,7 @@ function ClubPage({
 
   useEffect(() => {
     async function load() {
-      const [clubRes, eventsRes, membersRes, pollsRes] = await Promise.all([
+      const [clubRes, eventsRes, membersRes, pollsRes, roundRes] = await Promise.all([
         supabase.from('clubs').select('id, name, type, owner_id').eq('id', clubId).maybeSingle(),
         supabase
           .from('events')
@@ -50,9 +53,17 @@ function ClubPage({
           .eq('club_id', clubId)
           .eq('status', 'open')
           .order('created_at', { ascending: false }),
+        // At most one book vote can be in progress per club.
+        supabase
+          .from('book_rounds')
+          .select('id, title, status')
+          .eq('club_id', clubId)
+          .neq('status', 'closed')
+          .maybeSingle(),
       ]);
 
-      const failure = clubRes.error || eventsRes.error || membersRes.error || pollsRes.error;
+      const failure =
+        clubRes.error || eventsRes.error || membersRes.error || pollsRes.error || roundRes.error;
       if (failure) {
         console.error('Error loading club:', failure);
         setLoadError(failure.message);
@@ -68,6 +79,7 @@ function ClubPage({
       setPast(all.filter((e) => new Date(e.event_time).getTime() < cutoff));
       setMembers(membersRes.data);
       setPolls(pollsRes.data);
+      setRound(roundRes.data);
       setLoading(false);
     }
 
@@ -175,6 +187,32 @@ function ClubPage({
 
         <h1 className="text-3xl font-bold text-gray-900 mb-1">{club.name}</h1>
         <p className="text-sm text-gray-500 mb-6">{typeLabel(club.type)}</p>
+
+        {club.type === 'book_club' && (round || canEdit) && (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 mb-2">Book vote</h2>
+            {round ? (
+              <button
+                onClick={() => onOpenRound(round.id)}
+                className="w-full text-left border border-purple-300 bg-purple-50 rounded-xl px-4 py-3 hover:bg-purple-100 transition"
+              >
+                <span className="block font-semibold text-gray-900">{round.title}</span>
+                <span className="block text-xs text-purple-800">
+                  {round.status === 'suggesting'
+                    ? 'Suggestions are open · tap to suggest a book'
+                    : 'Voting is open · tap to vote'}
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onCreateRound({ id: club.id, name: club.name })}
+                className="w-full border border-purple-400 text-purple-700 font-semibold py-2 rounded-xl hover:bg-purple-50 transition"
+              >
+                Start a book vote
+              </button>
+            )}
+          </div>
+        )}
 
         {polls.length > 0 && (
           <div className="mb-6">

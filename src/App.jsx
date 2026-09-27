@@ -3,11 +3,13 @@ import ClubPage from './ClubPage';
 import CreateClub from './CreateClub';
 import CreateEvent from './CreateEvent';
 import CreatePoll from './CreatePoll';
+import CreateRound from './CreateRound';
 import EditEvent from './EditEvent';
 import EventList from './EventList';
 import EventPage from './EventPage';
 import JoinScreen from './JoinScreen';
 import PollPage from './PollPage';
+import RoundPage from './RoundPage';
 import ProfilePage from './ProfilePage';
 import ResetPassword from './ResetPassword';
 import { Centered, ErrorScreen } from './Screens';
@@ -42,6 +44,7 @@ function App() {
   // { name: 'list' } | { name: 'club', clubId } | { name: 'event', eventId, clubId }
   // | { name: 'createClub' } | { name: 'createEvent', club?, template? } | { name: 'profile' }
   // | { name: 'editEvent', eventId } | { name: 'poll', pollId } | { name: 'createPoll', club, template? }
+  // | { name: 'round', roundId } | { name: 'createRound', club }
   const [view, setView] = useState({ name: 'list' });
 
   useEffect(() => {
@@ -202,6 +205,29 @@ function App() {
     );
   }
 
+  if (view.name === 'createRound') {
+    return (
+      <CreateRound
+        club={view.club}
+        onCancel={() => setView({ name: 'club', clubId: view.club.id })}
+        onCreated={(roundId) => setView({ name: 'round', roundId })}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (view.name === 'round') {
+    return (
+      <RoundPage
+        roundId={view.roundId}
+        session={session}
+        onBack={(clubId) => setView({ name: 'club', clubId })}
+        onOpenEvent={(eventId) => setView({ name: 'event', eventId })}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   if (view.name === 'poll') {
     return (
       <PollPage
@@ -224,6 +250,8 @@ function App() {
         onSchedule={(club, template) => setView({ name: 'createEvent', club, template })}
         onOpenPoll={(pollId) => setView({ name: 'poll', pollId })}
         onCreatePoll={(club, template) => setView({ name: 'createPoll', club, template })}
+        onOpenRound={(roundId) => setView({ name: 'round', roundId })}
+        onCreateRound={(club) => setView({ name: 'createRound', club })}
         onLogout={handleLogout}
       />
     );
@@ -253,6 +281,7 @@ function App() {
       onCreateClub={() => setView({ name: 'createClub' })}
       onCreateEvent={() => setView({ name: 'createEvent' })}
       onOpenPoll={(pollId) => setView({ name: 'poll', pollId })}
+      onOpenRound={(roundId) => setView({ name: 'round', roundId })}
       onProfile={() => setView({ name: 'profile' })}
       onLogout={handleLogout}
     />

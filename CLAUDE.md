@@ -107,6 +107,8 @@ become a product other people can use to host their own events.
 - `src/GuestList.jsx` — owner view: club members and how each answered
 - `src/EditEvent.jsx` / `src/HostPicker.jsx` — edit an event (club owners: everything;
   the meeting's host: location + description only) and pick who's hosting
+- `src/CreateRound.jsx` / `src/RoundPage.jsx` — book votes: owner starts one, members
+  suggest (BookSearch) and approve, owner closes it and picks the winner
 - `src/CreatePoll.jsx` / `src/PollPage.jsx` — time polls: owners propose 2-10 times,
   members vote yes/maybe/no, owners see who voted and pick the winner (creates the
   meeting)
@@ -167,6 +169,35 @@ polls; null takes a vote back), `finalize_meeting_poll()` (club owners; creates 
 event and closes the poll), and `poll_results()` gives every member the totals.
 RLS: members read polls/times and only their OWN votes; club owners (and admins)
 read every vote so they can see who voted for what. Owners may delete a poll.
+
+**book_rounds / round_books / round_votes** (migration 014) — a book vote. An owner
+starts one per club (only one in progress at a time; book clubs only) and sets
+`max_per_member` (1-5). Stages: `suggesting` (members add books) -> `voting` (each
+member approves any books they'd be happy to read) -> `closed` (an owner picks the
+winner, optionally attaching it to a meeting as `events.book_id`). Secret ballot:
+`round_votes` rows are readable only by their own author; `round_tally()` withholds
+totals (null) from everyone except the club's owners until the round is closed; and
+`round_participation()` gives "5 of 8 have voted" without saying what for. All writes
+go through functions: `create_book_round`, `suggest_book` (also upserts the book),
+`remove_suggestion`, `start_book_voting`, `set_book_approval`, `close_book_round`
+(approval only), plus the bracket and attendance functions below.
+Migration 015 added: suggestions are private until you've suggested one yourself
+(RLS on round_books via `has_suggested()` / `round_status()`; no exception for owners
+or admins) and only their author can remove one (owners can't); "who's here" —
+`round_absent` rows mark members as not present: they can't vote, their votes are
+ignored by every tally, and "X of Y here have voted" counts only people who are
+here (`set_round_attendance()`, owners only, changeable any time); and the bracket
+method: `bracket_matches` (stage, slot, book_a, book_b, winner; book_b null = bye)
+and `bracket_votes` (secret, own rows only). `start_book_voting()` shuffles the books
+and draws stage 1 (an odd one out gets a bye); members `cast_bracket_vote()`;
+`bracket_results()` withholds counts from members until a match has a winner; a tie
+must be broken by an owner (`resolve_bracket_tie()`); `advance_bracket_round()` decides
+the round and draws the next, and closes the vote when one book is left.
+`attach_round_winner()` puts a closed vote's winner on a meeting. Known small leak:
+`suggest_book()` refuses a duplicate with an error, which tells a member that book has
+already been suggested.
+PostgREST note: `book_rounds` reaches `books` two ways (winner_book_id and via
+round_books), so embed the winner as `winner:books!winner_book_id(*)`.
 
 **club_invite_links** — club_id PK, code (random, unique). Separate table so only
 the club's owner can read the code (RLS is per row, a column on clubs would be
@@ -242,9 +273,8 @@ visible to every member). "Reset link" = the owner writes a new code.
   migration 006 (one club per event or per old recurring series)
 
 ## Roadmap (not yet built, in rough priority order)
-1. Book club features, next steps: member book suggestions (owner sets max per
-   person + deadline), voting (approval / ranked-choice, then bracket), reading
-   history + ratings, reminders, date polling. (Done: an owner picks the book with
+1. Book club features, next steps: an optional deadline for votes, reading history +
+   ratings, reminders, more voting methods (ranked choice). (Done: an owner picks the book with
    Open Library search.)
 2. Delete events and clubs, rename a club, edit a book club's poll after creating it
 3. Rotation helper: suggest who hasn't hosted yet; notify members of new polls

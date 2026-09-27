@@ -20,12 +20,14 @@ function EventList({
   onCreateClub,
   onCreateEvent,
   onOpenPoll,
+  onOpenRound,
   onProfile,
   onLogout,
 }) {
   const [events, setEvents] = useState(null);
   const [clubs, setClubs] = useState(null);
   const [polls, setPolls] = useState([]);
+  const [rounds, setRounds] = useState([]);
   const [myRsvps, setMyRsvps] = useState({});
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -34,7 +36,7 @@ function EventList({
     async function load() {
       const cutoff = new Date(Date.now() - EVENT_GRACE_MS).toISOString();
 
-      const [eventsRes, rsvpsRes, clubsRes, pollsRes] = await Promise.all([
+      const [eventsRes, rsvpsRes, clubsRes, pollsRes, roundsRes] = await Promise.all([
         supabase
           .from('events')
           .select('id, title, event_time, club_id, clubs(name, type)')
@@ -52,9 +54,15 @@ function EventList({
           .select('id, title, clubs(name)')
           .eq('status', 'open')
           .order('created_at', { ascending: false }),
+        supabase
+          .from('book_rounds')
+          .select('id, title, status, clubs(name)')
+          .neq('status', 'closed')
+          .order('created_at', { ascending: false }),
       ]);
 
-      const failure = eventsRes.error || rsvpsRes.error || clubsRes.error || pollsRes.error;
+      const failure =
+        eventsRes.error || rsvpsRes.error || clubsRes.error || pollsRes.error || roundsRes.error;
       if (failure) {
         console.error('Error loading home screen:', failure);
         setError(failure.message);
@@ -66,6 +74,7 @@ function EventList({
       setEvents(eventsRes.data);
       setClubs(clubsRes.data);
       setPolls(pollsRes.data);
+      setRounds(roundsRes.data);
     }
 
     load();
@@ -124,6 +133,28 @@ function EventList({
                 : "Nothing here yet. Ask the club's owner for their invite link."
               : 'No upcoming events.'}
           </p>
+        )}
+
+        {loaded && rounds.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-500 mb-2">Book vote</h2>
+            <ul className="space-y-2">
+              {rounds.map((r) => (
+                <li key={r.id}>
+                  <button
+                    onClick={() => onOpenRound(r.id)}
+                    className="w-full text-left border border-purple-300 bg-purple-50 rounded-xl px-4 py-3 hover:bg-purple-100 transition"
+                  >
+                    <span className="block font-semibold text-gray-900">{r.title}</span>
+                    <span className="block text-xs text-purple-800">
+                      {r.clubs?.name} ·{' '}
+                      {r.status === 'suggesting' ? 'suggest a book' : 'vote now'}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {loaded && polls.length > 0 && (
